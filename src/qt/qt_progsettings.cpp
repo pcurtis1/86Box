@@ -115,14 +115,19 @@ ProgSettings::ProgSettings(QWidget *parent)
     mouseSensitivity = mouse_sensitivity;
     ui->horizontalSlider->setValue(mouseSensitivity * 100.);
     ui->openDirUsrPath->setChecked(open_dir_usr_path > 0);
+    ui->checkBoxMultimediaKeys->setChecked(inhibit_multimedia_keys);
+#ifndef Q_OS_WINDOWS
+    ui->checkBoxMultimediaKeys->setHidden(true);
+#endif
 }
 
 void
 ProgSettings::accept()
 {
     strcpy(icon_set, ui->comboBox->currentData().toString().toUtf8().data());
-    lang_id           = ui->comboBoxLanguage->currentData().toUInt();
-    open_dir_usr_path = ui->openDirUsrPath->isChecked() ? 1 : 0;
+    lang_id                 = ui->comboBoxLanguage->currentData().toUInt();
+    open_dir_usr_path       = ui->openDirUsrPath->isChecked() ? 1 : 0;
+    inhibit_multimedia_keys = ui->checkBoxMultimediaKeys->isChecked();
 
     loadTranslators(QCoreApplication::instance());
     reloadStrings();
@@ -195,7 +200,9 @@ ProgSettings::loadTranslators(QObject *parent)
                 qDebug() << "Translations loaded.\n";
                 QCoreApplication::installTranslator(translator);
                 if (!qtTranslator->load(QLatin1String("qtbase_") + localetofilename.replace('-', '_'), QLibraryInfo::location(QLibraryInfo::TranslationsPath)))
-                    qtTranslator->load(QLatin1String("qt_") + localetofilename.replace('-', '_'), QApplication::applicationDirPath() + "/./translations/");
+                    if (!qtTranslator->load(QLatin1String("qtbase_") + localetofilename.left(localetofilename.indexOf('-')), QLibraryInfo::location(QLibraryInfo::TranslationsPath)))
+                        if (!qtTranslator->load(QLatin1String("qt_") + localetofilename.replace('-', '_'), QApplication::applicationDirPath() + "/./translations/"))
+                            qtTranslator->load(QLatin1String("qt_") + localetofilename.replace('-', '_'), QLatin1String(":/"));
                 if (QApplication::installTranslator(qtTranslator)) {
                     qDebug() << "Qt translations loaded."
                              << "\n";
@@ -207,7 +214,10 @@ ProgSettings::loadTranslators(QObject *parent)
         translator->load(QLatin1String("86box_") + lcid_langcode[lang_id].first, QLatin1String(":/"));
         QCoreApplication::installTranslator(translator);
         if (!qtTranslator->load(QLatin1String("qtbase_") + QString(lcid_langcode[lang_id].first).replace('-', '_'), QLibraryInfo::location(QLibraryInfo::TranslationsPath)))
-            qtTranslator->load(QLatin1String("qt_") + QString(lcid_langcode[lang_id].first).replace('-', '_'), QApplication::applicationDirPath() + "/./translations/");
+            if (!qtTranslator->load(QLatin1String("qtbase_") + QString(lcid_langcode[lang_id].first).left(QString(lcid_langcode[lang_id].first).indexOf('-')), QLibraryInfo::location(QLibraryInfo::TranslationsPath)))
+                if(!qtTranslator->load(QLatin1String("qt_") + QString(lcid_langcode[lang_id].first).replace('-', '_'), QApplication::applicationDirPath() + "/./translations/"))
+                    qtTranslator->load(QLatin1String("qt_") + QString(lcid_langcode[lang_id].first).replace('-', '_'), QLatin1String(":/"));
+
         QCoreApplication::installTranslator(qtTranslator);
     }
 }

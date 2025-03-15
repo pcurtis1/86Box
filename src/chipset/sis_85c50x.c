@@ -24,6 +24,7 @@
 #include <86box/86box.h>
 #include <86box/device.h>
 #include <86box/io.h>
+#include "cpu.h"
 #include <86box/timer.h>
 #include <86box/apm.h>
 #include <86box/machine.h>
@@ -107,8 +108,8 @@ sis_85c50x_shadow_recalc(sis_85c50x_t *dev)
         if (dev->states[8 + i] != state) {
             mem_set_mem_state_both(base, 0x00004000, state);
             sis_85c50x_log("%05X-%05X: R%c, W%c\n", base, base + 0x3fff,
-                           (dev->pci_conf[0x543 & (0x80 >> i)) ?
-                           ((dev->pci_conf[0x54] & 0x40) ? 'I' : 'D') : 'E',
+                           (dev->pci_conf[0x54] & (0x80 >> i)) ?
+                           ((dev->pci_conf[0x53] & 0x40) ? 'I' : 'D') : 'E',
                            (dev->pci_conf[0x54] & (0x80 >> i)) ?
                            ((dev->pci_conf[0x53] & 0x20) ? 'P' : 'I') : 'E');
             dev->states[8 + i] = state;
@@ -684,7 +685,7 @@ const device_t sis_85c50x_device = {
     .init          = sis_85c50x_init,
     .close         = sis_85c50x_close,
     .reset         = sis_85c50x_reset,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = NULL,
     .force_redraw  = NULL,
     .config        = NULL
@@ -698,7 +699,7 @@ const device_t sis_550x_85c503_device = {
     .init          = sis_85c50x_init,
     .close         = sis_85c50x_close,
     .reset         = sis_85c50x_reset,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = NULL,
     .force_redraw  = NULL,
     .config        = NULL
@@ -712,7 +713,7 @@ const device_t sis_85c50x_5503_device = {
     .init          = sis_85c50x_init,
     .close         = sis_85c50x_close,
     .reset         = sis_85c50x_reset,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = NULL,
     .force_redraw  = NULL,
     .config        = NULL
@@ -726,7 +727,7 @@ const device_t sis_550x_device = {
     .init          = sis_85c50x_init,
     .close         = sis_85c50x_close,
     .reset         = sis_85c50x_reset,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = NULL,
     .force_redraw  = NULL,
     .config        = NULL

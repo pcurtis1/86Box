@@ -35,6 +35,7 @@ enum {
 enum {
     CPU_8088 = 1, /* 808x class CPUs */
     CPU_8086,
+    CPU_8086_MAZOVIA,
     CPU_V20, /* NEC 808x class CPUs */
     CPU_V30,
     CPU_188, /* 18x class CPUs */
@@ -86,29 +87,32 @@ enum {
 enum {
     CPU_PKG_8088             = (1 << 0),
     CPU_PKG_8088_EUROPC      = (1 << 1),
-    CPU_PKG_8086             = (1 << 2),
-    CPU_PKG_188              = (1 << 3),
-    CPU_PKG_186              = (1 << 4),
-    CPU_PKG_286              = (1 << 5),
-    CPU_PKG_386SX            = (1 << 6),
-    CPU_PKG_386DX            = (1 << 7),
-    CPU_PKG_386DX_DESKPRO386 = (1 << 8),
-    CPU_PKG_M6117            = (1 << 9),
-    CPU_PKG_386SLC_IBM       = (1 << 10),
-    CPU_PKG_486SLC           = (1 << 11),
-    CPU_PKG_486SLC_IBM       = (1 << 12),
-    CPU_PKG_486BL            = (1 << 13),
-    CPU_PKG_486DLC           = (1 << 14),
-    CPU_PKG_SOCKET1          = (1 << 15),
-    CPU_PKG_SOCKET3          = (1 << 16),
-    CPU_PKG_SOCKET3_PC330    = (1 << 17),
-    CPU_PKG_STPC             = (1 << 18),
-    CPU_PKG_SOCKET4          = (1 << 19),
-    CPU_PKG_SOCKET5_7        = (1 << 20),
-    CPU_PKG_SOCKET8          = (1 << 21),
-    CPU_PKG_SLOT1            = (1 << 22),
-    CPU_PKG_SLOT2            = (1 << 23),
-    CPU_PKG_SOCKET370        = (1 << 24)
+    CPU_PKG_8088_VTECH       = (1 << 2),
+    CPU_PKG_8086             = (1 << 3),
+    CPU_PKG_8086_MAZOVIA     = (1 << 4),
+    CPU_PKG_8086_VTECH       = (1 << 5),
+    CPU_PKG_188              = (1 << 6),
+    CPU_PKG_186              = (1 << 7),
+    CPU_PKG_286              = (1 << 8),
+    CPU_PKG_386SX            = (1 << 9),
+    CPU_PKG_386DX            = (1 << 10),
+    CPU_PKG_386DX_DESKPRO386 = (1 << 11),
+    CPU_PKG_M6117            = (1 << 12),
+    CPU_PKG_386SLC_IBM       = (1 << 13),
+    CPU_PKG_486SLC           = (1 << 14),
+    CPU_PKG_486SLC_IBM       = (1 << 15),
+    CPU_PKG_486BL            = (1 << 16),
+    CPU_PKG_486DLC           = (1 << 17),
+    CPU_PKG_SOCKET1          = (1 << 18),
+    CPU_PKG_SOCKET3          = (1 << 19),
+    CPU_PKG_SOCKET3_PC330    = (1 << 20),
+    CPU_PKG_STPC             = (1 << 21),
+    CPU_PKG_SOCKET4          = (1 << 22),
+    CPU_PKG_SOCKET5_7        = (1 << 23),
+    CPU_PKG_SOCKET8          = (1 << 24),
+    CPU_PKG_SLOT1            = (1 << 25),
+    CPU_PKG_SLOT2            = (1 << 26),
+    CPU_PKG_SOCKET370        = (1 << 27)
 };
 
 #define CPU_SUPPORTS_DYNAREC 1
@@ -518,6 +522,7 @@ extern int is_p6;
 extern int is_cxsmm;
 extern int hascache;
 extern int isibm486;
+extern int is_mazovia;
 extern int is_nec;
 extern int is_rapidcad;
 extern int hasfpu;
@@ -530,6 +535,7 @@ extern int hasfpu;
 #define CPU_FEATURE_3DNOW   (1 << 6)
 #define CPU_FEATURE_SYSCALL (1 << 7)
 #define CPU_FEATURE_3DNOWE  (1 << 8)
+#define CPU_FEATURE_PSE36   (1 << 9)
 
 extern uint32_t cpu_features;
 
@@ -583,6 +589,16 @@ extern uint32_t _tr[8];
 extern uint32_t cache_index;
 extern uint8_t  _cache[2048];
 
+/* For the Cyrix 6x86(MX) */
+extern uint8_t ccr0;
+extern uint8_t ccr1;
+extern uint8_t ccr2;
+extern uint8_t ccr3;
+extern uint8_t ccr4;
+extern uint8_t ccr5;
+extern uint8_t ccr6;
+extern uint8_t ccr7;
+
 /*Segments -
   _cs,_ds,_es,_ss are the segment structures
   CS,DS,ES,SS is the 16-bit data
@@ -616,6 +632,8 @@ extern int cpu_prefetch_width;
 extern int cpu_mem_prefetch_cycles;
 extern int cpu_rom_prefetch_cycles;
 extern int cpu_waitstates;
+extern int cpu_flush_pending;
+extern int cpu_old_paging;
 extern int cpu_cache_int_enabled;
 extern int cpu_cache_ext_enabled;
 extern int cpu_isa_speed;
@@ -808,9 +826,22 @@ extern int lock_legal_80[8];
 extern int lock_legal_f6[8];
 extern int lock_legal_fe[8];
 
+extern int new_ne;
+
 extern int in_lock;
 extern int cpu_override_interpreter;
 
 extern int is_lock_legal(uint32_t fetchdat);
+
+extern void     prefetch_queue_set_pos(int pos);
+extern void     prefetch_queue_set_ip(uint16_t ip);
+extern void     prefetch_queue_set_prefetching(int p);
+extern int      prefetch_queue_get_pos(void);
+extern uint16_t prefetch_queue_get_ip(void);
+extern int      prefetch_queue_get_prefetching(void);
+extern int      prefetch_queue_get_size(void);
+
+#define prefetch_queue_set_suspended(s) prefetch_queue_set_prefetching(!s)
+#define prefetch_queue_get_suspended !prefetch_queue_get_prefetching
 
 #endif /*EMU_CPU_H*/

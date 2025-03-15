@@ -19,9 +19,6 @@
 #include "qt_machinestatus.hpp"
 
 extern "C" {
-#define EMU_CPU_H // superhack - don't want timer.h to include cpu.h here, and some combo is preventing a compile
-extern uint64_t tsc;
-
 #include <86box/hdd.h>
 #include <86box/timer.h>
 #include <86box/86box.h>
@@ -42,6 +39,7 @@ extern uint64_t tsc;
 #include <86box/network.h>
 #include <86box/ui.h>
 #include <86box/machine_status.h>
+#include <86box/config.h>
 };
 
 #include <QIcon>
@@ -60,6 +58,8 @@ extern uint64_t tsc;
 #include <array>
 
 extern MainWindow *main_window;
+
+static bool sbar_initialized = false;
 
 namespace {
 struct PixmapSetActive {
@@ -90,7 +90,7 @@ struct Pixmaps {
     PixmapSetEmptyActive mo;
     PixmapSetActive      hd;
     PixmapSetEmptyActive net;
-    QPixmap              sound;
+    QPixmap              sound, soundMuted;
 };
 
 struct StateActive {
@@ -216,6 +216,7 @@ struct MachineStatus::States {
         pixmaps.hd.load("/hard_disk%1.ico");
         pixmaps.net.load("/network%1.ico");
         pixmaps.sound = ProgSettings::loadIcon("/sound.ico").pixmap(pixmap_size);
+        pixmaps.soundMuted = ProgSettings::loadIcon("/sound_mute.ico").pixmap(pixmap_size);
 
         cartridge[0].pixmaps = &pixmaps.cartridge;
         cartridge[1].pixmaps = &pixmaps.cartridge;
@@ -257,11 +258,19 @@ MachineStatus::MachineStatus(QObject *parent)
     , refreshTimer(new QTimer(this))
 {
     d = std::make_unique<MachineStatus::States>(this);
+    muteUnmuteAction = nullptr;
+    soundMenu = nullptr;
     connect(refreshTimer, &QTimer::timeout, this, &MachineStatus::refreshIcons);
     refreshTimer->start(75);
 }
 
 MachineStatus::~MachineStatus() = default;
+
+void
+MachineStatus::setSoundGainAction(QAction* action)
+{
+    soundGainAction = action;
+}
 
 bool
 MachineStatus::hasCassette()
@@ -367,17 +376,42 @@ MachineStatus::iterateNIC(const std::function<void(int)> &cb)
 }
 
 static int
-hdd_count(int bus)
+hdd_count(const int bus_type)
 {
     int c = 0;
 
     for (uint8_t i = 0; i < HDD_NUM; i++) {
-        if (hdd[i].bus == bus) {
+        if (hdd[i].bus_type == bus_type) {
             c++;
         }
     }
 
     return c;
+}
+
+void
+MachineStatus::refreshEmptyIcons()
+{
+    /* Check if icons are initialized. */
+    if (!sbar_initialized)
+        return;
+
+    for (size_t i = 0; i < FDD_NUM; ++i)
+        d->fdd[i].setEmpty(machine_status.fdd[i].empty);
+    for (size_t i = 0; i < CDROM_NUM; ++i)
+        d->cdrom[i].setEmpty(machine_status.cdrom[i].empty);
+    for (size_t i = 0; i < ZIP_NUM; i++)
+        d->zip[i].setEmpty(machine_status.zip[i].empty);
+    for (size_t i = 0; i < MO_NUM; i++)
+        d->mo[i].setEmpty(machine_status.mo[i].empty);
+
+    d->cassette.setEmpty(machine_status.cassette.empty);
+
+    for (size_t i = 0; i < NET_CARD_MAX; i++)
+        d->net[i].setEmpty(machine_status.net[i].empty);
+
+    for (int i = 0; i < 2; ++i)
+        d->cartridge[i].setEmpty(machine_status.cartridge[i].empty);
 }
 
 void
@@ -387,33 +421,23 @@ MachineStatus::refreshIcons()
     if (!update_icons)
         return;
 
-    for (size_t i = 0; i < FDD_NUM; ++i) {
+    for (size_t i = 0; i < FDD_NUM; ++i)
         d->fdd[i].setActive(machine_status.fdd[i].active);
-        d->fdd[i].setEmpty(machine_status.fdd[i].empty);
-    }
     for (size_t i = 0; i < CDROM_NUM; ++i) {
         d->cdrom[i].setActive(machine_status.cdrom[i].active);
         if (machine_status.cdrom[i].active)
             ui_sb_update_icon(SB_CDROM | i, 0);
-
-        d->cdrom[i].setEmpty(machine_status.cdrom[i].empty);
     }
     for (size_t i = 0; i < ZIP_NUM; i++) {
         d->zip[i].setActive(machine_status.zip[i].active);
         if (machine_status.zip[i].active)
             ui_sb_update_icon(SB_ZIP | i, 0);
-
-        d->zip[i].setEmpty(machine_status.zip[i].empty);
     }
     for (size_t i = 0; i < MO_NUM; i++) {
         d->mo[i].setActive(machine_status.mo[i].active);
         if (machine_status.mo[i].active)
             ui_sb_update_icon(SB_MO | i, 0);
-
-        d->mo[i].setEmpty(machine_status.mo[i].empty);
     }
-
-    d->cassette.setEmpty(machine_status.cassette.empty);
 
     for (size_t i = 0; i < HDD_BUS_USB; i++) {
         d->hdds[i].setActive(machine_status.hdd[i].active);
@@ -421,14 +445,8 @@ MachineStatus::refreshIcons()
             ui_sb_update_icon(SB_HDD | i, 0);
     }
 
-    for (size_t i = 0; i < NET_CARD_MAX; i++) {
+    for (size_t i = 0; i < NET_CARD_MAX; i++)
         d->net[i].setActive(machine_status.net[i].active);
-        d->net[i].setEmpty(machine_status.net[i].empty);
-    }
-
-    for (int i = 0; i < 2; ++i) {
-        d->cartridge[i].setEmpty(machine_status.cartridge[i].empty);
-    }
 }
 
 void
@@ -485,6 +503,28 @@ MachineStatus::refresh(QStatusBar *sbar)
         sbar->removeWidget(d->net[i].label.get());
     }
     sbar->removeWidget(d->sound.get());
+
+    if (!muteUnmuteAction) {
+        muteUnmuteAction = new QAction;
+        connect(muteUnmuteAction, &QAction::triggered, this, [this]() {
+            sound_muted ^= 1;
+            config_save();
+            if (d->sound)
+                d->sound->setPixmap(sound_muted ? d->pixmaps.soundMuted : d->pixmaps.sound);
+            
+            muteUnmuteAction->setText(sound_muted ? tr("&Unmute") : tr("&Mute"));
+        });
+    }
+
+    if (!soundMenu) {
+        soundMenu = new QMenu((QWidget*)parent());
+
+        soundMenu->addAction(muteUnmuteAction);
+        soundMenu->addSeparator();
+        soundMenu->addAction(soundGainAction);
+
+        muteUnmuteAction->setParent(soundMenu);
+    }
 
     if (cassette_enable) {
         d->cassette.label = std::make_unique<ClickableLabel>();
@@ -654,16 +694,22 @@ MachineStatus::refresh(QStatusBar *sbar)
     }
 
     d->sound = std::make_unique<ClickableLabel>();
-    d->sound->setPixmap(d->pixmaps.sound);
-
-    connect(d->sound.get(), &ClickableLabel::doubleClicked, d->sound.get(), [](QPoint pos) {
-        SoundGain gain(main_window);
-        gain.exec();
+    d->sound->setPixmap(sound_muted ? d->pixmaps.soundMuted : d->pixmaps.sound);
+    if (muteUnmuteAction)
+        muteUnmuteAction->setText(sound_muted ? tr("&Unmute") : tr("&Mute"));
+    
+    connect(d->sound.get(), &ClickableLabel::clicked, this, [this](QPoint pos) {
+        this->soundMenu->popup(pos - QPoint(0, this->soundMenu->sizeHint().height()));
     });
+
     d->sound->setToolTip(tr("Sound"));
     sbar->addWidget(d->sound.get());
     d->text = std::make_unique<QLabel>();
     sbar->addWidget(d->text.get());
+
+    sbar_initialized = true;
+
+    refreshEmptyIcons();
 }
 
 void
@@ -719,4 +765,6 @@ MachineStatus::updateTip(int tag)
         case SB_TEXT:
             break;
     }
+
+    refreshEmptyIcons();
 }

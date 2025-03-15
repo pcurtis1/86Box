@@ -83,7 +83,9 @@ int fpu_cycles = 0;
 int in_lock = 0;
 
 #ifdef ENABLE_X86_LOG
+#if 0
 void dumpregs(int);
+#endif
 
 int x86_do_log = ENABLE_X86_LOG;
 int indump     = 0;
@@ -93,13 +95,14 @@ x86_log(const char *fmt, ...)
 {
     va_list ap;
 
-    if (x808x_do_log) {
+    if (x86_do_log) {
         va_start(ap, fmt);
         pclog_ex(fmt, ap);
         va_end(ap);
     }
 }
 
+#if 0
 void
 dumpregs(int force)
 {
@@ -144,6 +147,7 @@ dumpregs(int force)
     x87_dumpregs();
     indump = 0;
 }
+#endif
 #else
 #    define x86_log(fmt, ...)
 #endif
@@ -267,13 +271,20 @@ reset_common(int hard)
     stack32        = 0;
     msr.fcr        = (1 << 8) | (1 << 9) | (1 << 12) | (1 << 16) | (1 << 19) | (1 << 21);
     msw            = 0;
+    new_ne         = 0;
+
+    ccr0 = ccr1 = ccr2 = ccr3 = ccr4 = ccr5 = ccr6 = ccr7 = 0;
+    ccr4 = 0x85;
+    cyrix.arr[3].base = 0x30000;
+    cyrix.arr[3].size = 65536;
+
     if (hascache)
         cr0 = 1 << 30;
     else
         cr0 = 0;
     if (is386 && !is486 && (fpu_type == FPU_387))
         cr0 |= 0x10;
-    cpu_cache_int_enabled = 0;
+    cpu_cache_int_enabled = 0;  
     cpu_update_waitstates();
     cr4              = 0;
     cpu_state.eflags = 0;
@@ -321,6 +332,8 @@ reset_common(int hard)
     if (hard)
         codegen_reset();
 #endif
+    cpu_flush_pending = 0;
+    cpu_old_paging = 0;
     if (!hard)
         flushmmucache();
     x86_was_reset = 1;
@@ -377,9 +390,6 @@ softresetx86(void)
 {
     if (soft_reset_mask)
         return;
-
-    if (ibm8514_active || xga_active)
-        vga_on = 1;
 
     reset_common(0);
 }

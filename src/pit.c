@@ -526,7 +526,7 @@ pit_timer_over(void *priv)
 
     dev->clock ^= 1;
 
-    for (uint8_t i = 0; i < 3; i++)
+    for (uint8_t i = 0; i < NUM_COUNTERS; i++)
         pit_ctr_set_clock_common(&dev->counters[i], dev->clock, dev);
 
     timer_advance_u64(&dev->callback_timer, dev->pit_const >> 1ULL);
@@ -874,7 +874,7 @@ pit_device_reset(pit_t *dev)
 {
     dev->clock = 0;
 
-    for (uint8_t i = 0; i < 3; i++)
+    for (uint8_t i = 0; i < NUM_COUNTERS; i++)
         ctr_reset(&dev->counters[i]);
 }
 
@@ -885,7 +885,7 @@ pit_reset(pit_t *dev)
 
     dev->clock = 0;
 
-    for (uint8_t i = 0; i < 3; i++)
+    for (uint8_t i = 0; i < NUM_COUNTERS; i++)
         ctr_reset(&dev->counters[i]);
 
     /* Disable speaker gate. */
@@ -960,7 +960,7 @@ const device_t i8253_device = {
     .init          = pit_init,
     .close         = pit_close,
     .reset         = NULL,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = pit_speed_changed,
     .force_redraw  = NULL,
     .config        = NULL
@@ -974,7 +974,7 @@ const device_t i8253_ext_io_device = {
     .init          = pit_init,
     .close         = pit_close,
     .reset         = NULL,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = NULL,
     .force_redraw  = NULL,
     .config        = NULL
@@ -988,7 +988,7 @@ const device_t i8254_device = {
     .init          = pit_init,
     .close         = pit_close,
     .reset         = NULL,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = pit_speed_changed,
     .force_redraw  = NULL,
     .config        = NULL
@@ -1002,7 +1002,7 @@ const device_t i8254_sec_device = {
     .init          = pit_init,
     .close         = pit_close,
     .reset         = NULL,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = pit_speed_changed,
     .force_redraw  = NULL,
     .config        = NULL
@@ -1016,7 +1016,7 @@ const device_t i8254_ext_io_device = {
     .init          = pit_init,
     .close         = pit_close,
     .reset         = NULL,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = NULL,
     .force_redraw  = NULL,
     .config        = NULL
@@ -1030,7 +1030,7 @@ const device_t i8254_ps2_device = {
     .init          = pit_init,
     .close         = pit_close,
     .reset         = NULL,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = pit_speed_changed,
     .force_redraw  = NULL,
     .config        = NULL
@@ -1250,14 +1250,14 @@ pit_set_clock(uint32_t clock)
 }
 
 const pit_intf_t pit_classic_intf = {
-    &pit_read,
-    &pit_write,
-    &pit_ctr_get_count,
-    &pit_ctr_set_gate,
-    &pit_ctr_set_using_timer,
-    &pit_ctr_set_out_func,
-    &pit_ctr_set_load_func,
-    &ctr_clock,
-    &pit_set_pit_const,
-    NULL,
+    .read            = &pit_read,
+    .write           = &pit_write,
+    .get_count       = &pit_ctr_get_count,
+    .set_gate        = &pit_ctr_set_gate,
+    .set_using_timer = &pit_ctr_set_using_timer,
+    .set_out_func    = &pit_ctr_set_out_func,
+    .set_load_func   = &pit_ctr_set_load_func,
+    .ctr_clock       = &ctr_clock,
+    .set_pit_const   = &pit_set_pit_const,
+    .data            = NULL,
 };

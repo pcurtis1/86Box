@@ -18,6 +18,11 @@
  *          Copyright 2021-2022 Cacodemon345
  *          Copyright 2021-2022 Teemu Korhonen
  */
+
+#ifdef __HAIKU__
+#include <OS.h>
+#endif
+
 #include <cstdio>
 
 #include <mutex>
@@ -52,6 +57,10 @@
 #ifdef Q_OS_UNIX
 #    include <pthread.h>
 #    include <sys/mman.h>
+#endif
+
+#ifdef Q_OS_OPENBSD
+#    include <pthread_np.h>
 #endif
 
 #if 0
@@ -152,6 +161,7 @@ strnicmp(const char *s1, const char *s2, size_t n)
 void
 do_start(void)
 {
+    //
 }
 
 void
@@ -227,7 +237,12 @@ plat_getcwd(char *bufp, int max)
 {
 #ifdef __APPLE__
     /* Working directory for .app bundles is undefined. */
+#ifdef USE_EXE_PATH
     strncpy(bufp, exe_path, max);
+#else
+    CharPointer(bufp, max) = QDir::homePath().toUtf8();
+    path_append_filename(bufp, bufp, "Library/86Box");
+#endif
 #else
     CharPointer(bufp, max) = QDir::currentPath().toUtf8();
 #endif
@@ -356,6 +371,10 @@ plat_mmap(size_t size, uint8_t executable)
 #elif defined Q_OS_UNIX
 #    if defined Q_OS_DARWIN && defined MAP_JIT
     void *ret = mmap(0, size, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0), MAP_ANON | MAP_PRIVATE | (executable ? MAP_JIT : 0), -1, 0);
+#    elif defined(PROT_MPROTECT)
+    void *ret = mmap(0, size, PROT_MPROTECT(PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0)), MAP_ANON | MAP_PRIVATE, -1, 0);
+    if (ret)
+        mprotect(ret, size, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0));
 #    else
     void *ret = mmap(0, size, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0), MAP_ANON | MAP_PRIVATE, -1, 0);
 #    endif
@@ -373,12 +392,17 @@ plat_munmap(void *ptr, size_t size)
 #endif
 }
 
+extern bool cpu_thread_running;
 void
 plat_pause(int p)
 {
     static wchar_t oldtitle[512];
     wchar_t        title[1024];
     wchar_t        paused_msg[512];
+
+    if (!cpu_thread_running && p == 1) {
+        p = 2;
+    }
 
     if ((!!p) == dopause) {
 #ifdef Q_OS_WINDOWS
@@ -449,6 +473,7 @@ QMap<uint32_t, QPair<QString, QString>> ProgSettings::lcid_langcode = {
     { 0x0410, { "it-IT", "Italian (Italy)" }         },
     { 0x0411, { "ja-JP", "Japanese (Japan)" }        },
     { 0x0412, { "ko-KR", "Korean (Korea)" }          },
+    { 0x0413, { "nl-NL", "Dutch (Netherlands)" }     },
     { 0x0415, { "pl-PL", "Polish (Poland)" }         },
     { 0x0416, { "pt-BR", "Portuguese (Brazil)" }     },
     { 0x0816, { "pt-PT", "Portuguese (Portugal)" }   },
@@ -545,7 +570,7 @@ endblit()
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
-}
+} /*extern "C" */
 
 #ifdef Q_OS_WINDOWS
 size_t
@@ -583,6 +608,8 @@ c16stombs(char dst[], const uint16_t src[], int len)
 }
 #endif
 
+#    define MOUSE_CAPTURE_KEYSEQ "F8+F12"
+
 #ifdef _WIN32
 #    if defined(__amd64__) || defined(_M_X64) || defined(__aarch64__) || defined(_M_ARM64)
 #        define LIB_NAME_GS   "gsdll64.dll"
@@ -592,12 +619,10 @@ c16stombs(char dst[], const uint16_t src[], int len)
 #        define LIB_NAME_GPCL "gpcl6dll32.dll"
 #    endif
 #    define LIB_NAME_PCAP        "Npcap"
-#    define MOUSE_CAPTURE_KEYSEQ "F8+F12"
 #else
 #    define LIB_NAME_GS          "libgs"
 #    define LIB_NAME_GPCL        "libgpcl6"
 #    define LIB_NAME_PCAP        "libpcap"
-#    define MOUSE_CAPTURE_KEYSEQ "Ctrl+End"
 #endif
 
 QMap<int, std::wstring> ProgSettings::translatedstrings;
@@ -620,11 +645,14 @@ ProgSettings::reloadStrings()
     translatedstrings[STRING_GHOSTPCL_ERROR_DESC]       = QCoreApplication::translate("", "%1 is required for automatic conversion of PCL files to PDF.\n\nAny documents sent to the generic PCL printer will be saved as Printer Command Language (.pcl) files.").arg(LIB_NAME_GPCL).toStdWString();
     translatedstrings[STRING_HW_NOT_AVAILABLE_MACHINE]  = QCoreApplication::translate("", "Machine \"%hs\" is not available due to missing ROMs in the roms/machines directory. Switching to an available machine.").toStdWString();
     translatedstrings[STRING_HW_NOT_AVAILABLE_VIDEO]    = QCoreApplication::translate("", "Video card \"%hs\" is not available due to missing ROMs in the roms/video directory. Switching to an available video card.").toStdWString();
-    translatedstrings[STRING_HW_NOT_AVAILABLE_VIDEO2]   = QCoreApplication::translate("", "Video card #2 \"%hs\"  is not available due to missing ROMs in the roms/video directory. Disabling the second video card.").toStdWString();
+    translatedstrings[STRING_HW_NOT_AVAILABLE_VIDEO2]   = QCoreApplication::translate("", "Video card #2 \"%hs\" is not available due to missing ROMs in the roms/video directory. Disabling the second video card.").toStdWString();
+    translatedstrings[STRING_HW_NOT_AVAILABLE_DEVICE]   = QCoreApplication::translate("", "Device \"%hs\" is not available due to missing ROMs. Ignoring the device.").toStdWString();
     translatedstrings[STRING_HW_NOT_AVAILABLE_TITLE]    = QCoreApplication::translate("", "Hardware not available").toStdWString();
     translatedstrings[STRING_MONITOR_SLEEP]             = QCoreApplication::translate("", "Monitor in sleep mode").toStdWString();
     translatedstrings[STRING_NET_ERROR]                 = QCoreApplication::translate("", "Failed to initialize network driver").toStdWString();
     translatedstrings[STRING_NET_ERROR_DESC]            = QCoreApplication::translate("", "The network configuration will be switched to the null driver").toStdWString();
+    translatedstrings[STRING_ESCP_ERROR_TITLE]          = QCoreApplication::translate("", "Unable to find Dot-Matrix fonts").toStdWString();
+    translatedstrings[STRING_ESCP_ERROR_DESC]           = QCoreApplication::translate("", "TrueType fonts in the \"roms/printer/fonts\" directory are required for the emulation of the Generic ESC/P Dot-Matrix Printer.").toStdWString();
 }
 
 wchar_t *
@@ -795,12 +823,20 @@ plat_set_thread_name(void *thread, const char *name)
     if (thread) /* Apple pthread can only set self's name */
         return;
     char truncated[64];
+#    elif defined(Q_OS_NETBSD)
+    char truncated[64];
 #    else
     char truncated[16];
 #    endif
     strncpy(truncated, name, sizeof(truncated) - 1);
-#    ifdef Q_OS_DARWIN
+#    if defined(Q_OS_DARWIN)
     pthread_setname_np(truncated);
+#    elif defined(Q_OS_NETBSD)
+    pthread_setname_np(thread ? *((pthread_t *) thread) : pthread_self(), truncated, "%s");
+#    elif defined(__HAIKU__)
+    rename_thread(find_thread(NULL), truncated);
+#    elif defined(Q_OS_OPENBSD)
+    pthread_set_name_np(thread ? *((pthread_t *) thread) : pthread_self(), truncated);
 #    else
     pthread_setname_np(thread ? *((pthread_t *) thread) : pthread_self(), truncated);
 #    endif
